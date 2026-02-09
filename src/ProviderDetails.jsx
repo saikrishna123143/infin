@@ -6,7 +6,7 @@ export default function ProviderDetails({
 }) {
   function toggleStatus(provider, index) {
     setProvidersData(prev => {
-      const updated = prev[provider].map((note, i) =>
+      const updated = (prev[provider] || []).map((note, i) =>
         i === index
           ? {
               ...note,
@@ -24,7 +24,7 @@ export default function ProviderDetails({
 
   function updateNote(provider, index, value) {
     setProvidersData(prev => {
-      const updated = prev[provider].map((note, i) =>
+      const updated = (prev[provider] || []).map((note, i) =>
         i === index ? { ...note, content: value } : note
       );
 
@@ -37,18 +37,18 @@ export default function ProviderDetails({
       <div key={provider} className="mb-10">
         <h2 className="text-xl font-semibold mb-4">{provider}</h2>
 
-        {providersData[provider].map((note, index) => (
-          <div
-            key={index}
-            className="bg-white p-4 rounded-lg shadow mb-4"
-          >
-            {/* TOP INFO GRID */}
+        {(providersData[provider] || []).map((note, index) => (
+          <div key={index} className="bg-white p-4 rounded-lg shadow mb-4">
+            {/* TOP INFO */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 text-sm">
-              <p><span className="font-medium">Case ID:</span> {note.caseId}</p>
-              <p><span className="font-medium">Name:</span> {note.name}</p>
-              <p><span className="font-medium">DOB:</span> {note.dob}</p>
-              <p><span className="font-medium">Member ID:</span> {note.memberId}</p>
-              <p><span className="font-medium">Tax ID:</span> {note.taxId}</p>
+              <p>
+                <span className="font-medium">Case ID:</span> {note.caseId}
+              </p>
+
+              <p>
+                <span className="font-medium">Insurance:</span>{" "}
+                {note.insurance || provider}
+              </p>
 
               <p>
                 <span className="font-medium">Status:</span>{" "}
@@ -71,19 +71,15 @@ export default function ProviderDetails({
               }`}
               value={note.content}
               disabled={note.status === "SUBMITTED"}
-              onChange={e =>
-                updateNote(provider, index, e.target.value)
-              }
+              onChange={e => updateNote(provider, index, e.target.value)}
             />
 
-            {/* ACTION BUTTON */}
+            {/* ACTION */}
             <button
               className="mt-3 bg-blue-500 text-white px-3 py-1 rounded"
               onClick={() => toggleStatus(provider, index)}
             >
-              {note.status === "IN_PROGRESS"
-                ? "Submit"
-                : "Reopen"}
+              {note.status === "IN_PROGRESS" ? "Submit" : "Reopen"}
             </button>
           </div>
         ))}
@@ -91,23 +87,20 @@ export default function ProviderDetails({
     );
   }
 
+  const providersOrder = ["UHC", "Humana", "Ambetter", "Medicare", "Other"];
+
   return (
     <div className="min-h-screen bg-gray-100 p-8">
-      <button
-        className="mb-6 text-blue-600 underline"
-        onClick={goBack}
-      >
+      <button className="mb-6 text-blue-600 underline" onClick={goBack}>
         ← Back to Dashboard
       </button>
 
       <h1 className="text-2xl font-bold mb-6">
-        {view === "ALL"
-          ? "All Providers"
-          : `${view} Provider`} – Patient Notes
+        {view === "ALL" ? "All Providers" : `${view} Provider`} – Notes
       </h1>
 
       {view === "ALL"
-        ? Object.keys(providersData).map(renderProvider)
+        ? providersOrder.map(renderProvider)
         : renderProvider(view)}
     </div>
   );
