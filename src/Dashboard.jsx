@@ -3,7 +3,11 @@ import { useState } from "react";
 export default function Dashboard({ providersData, setProvidersData, openView }) {
   const [excelText, setExcelText] = useState("");
 
-  // ✅ Normalize insurance values
+  // ✅ User dynamic column names
+  const [caseIdColumnName, setCaseIdColumnName] = useState("Case ID");
+  const [insuranceColumnName, setInsuranceColumnName] = useState("Insurance");
+
+  // ✅ Normalize insurance values (Provider Group)
   function normalizeInsurance(value) {
     const v = (value || "").trim().toLowerCase();
 
@@ -11,6 +15,10 @@ export default function Dashboard({ providersData, setProvidersData, openView })
     if (v === "humana") return "Humana";
     if (v === "ambetter") return "Ambetter";
     if (v === "medicare") return "Medicare";
+    if (v === "cigna") return "Cigna";
+
+    // ✅ Keep American Specialty Health separate
+    if (v.includes("american specialty health")) return "American Specialty Health";
 
     return "Other";
   }
@@ -21,7 +29,14 @@ export default function Dashboard({ providersData, setProvidersData, openView })
     if (provider === "Ambetter") return "Ambetter";
     if (provider === "UHC") return "UHC";
     if (provider === "Medicare") return "Availity";
-    return "BLACK";
+
+    // ✅ Cigna portal
+    if (provider === "Cigna") return "Cigna";
+
+    // ✅ American Specialty Health uses Cigna portal
+    if (provider === "American Specialty Health") return "Cigna";
+
+    return "---";
   }
 
   // ✅ Generate note content
@@ -29,26 +44,33 @@ export default function Dashboard({ providersData, setProvidersData, openView })
     // Medicare special format
     if (provider === "Medicare") {
       return `Checked on Availity web portal found the benefits which are as follows,
- Insurance primary: Yes,
+Insurance primary: Yes,
 Tax id: ,
- Network Status: In-Network, 
+Network Status: In-Network, 
 Effective Date:  - no term date (Calendar Year), 
 Plan Type: Medicare Part B, 
 Co-Insurance: 20%, 
 Individual DED: $283, Met: $, REM: $ , 
 Therapy Cap Amount: $2480, USED: $, Rem:$,
- Visit limit: Based on medical necessity, 
+Visit limit: Based on medical necessity, 
 Home Health Care: No,
- Hospice: No, 
+Hospice: No, 
 Skilled Nursing Care: No, 
 Referral required: No, 
 Auth Required: No,
- Tele Health: NA`;
+Tele Health: NA`;
     }
 
-    // UHC / Humana / Ambetter
-    if (provider === "Humana" || provider === "Ambetter" || provider === "UHC") {
-      return `Checked on ${getPortalName(provider)} portal found the benefits which are as follows,
+    // UHC / Humana / Ambetter / Cigna / American Specialty Health
+    if (
+      provider === "Humana" ||
+      provider === "Ambetter" ||
+      provider === "UHC" ||
+      provider === "Cigna" ||
+      provider === "American Specialty Health"
+    ) {
+      return `TIN#
+Checked on ${getPortalName(provider)} portal found the benefits which are as follows,
 Network status: In-network
 This is Primary Insurance
 - Effective Date:
@@ -70,7 +92,8 @@ This is Primary Insurance
     }
 
     // Other
-    return `Checked on --- portal found the benefits which are as follows,
+    return `TIN#
+Checked on --- portal found the benefits which are as follows,
 Network status: In-network
 This is Primary Insurance
 - Effective Date:
@@ -91,24 +114,41 @@ This is Primary Insurance
 - call refer:`;
   }
 
-  // ✅ Parse pasted data (your format: many columns)
-  // Takes:
-  //   Case ID = FIRST column
-  //   Insurance = LAST column
+  // ✅ Find column index from header row
+  function findColumnIndex(headers, columnName) {
+    const wanted = (columnName || "").trim().toLowerCase();
+    return headers.findIndex(h => (h || "").trim().toLowerCase() === wanted);
+  }
+
+  // ✅ Parse pasted table by column names (dynamic)
   function parseExcelText(text) {
-    const lines = text
-      .split("\n")
-      .map(l => l.trim())
-      .filter(Boolean);
+    const rawLines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    if (rawLines.length < 2) return [];
 
-    if (lines.length < 1) return [];
+    // First row = headers
+    const headers = rawLines[0].split("\t").map(x => x.trim());
 
-    return lines
+    const caseIdIndex = findColumnIndex(headers, caseIdColumnName);
+    const insuranceIndex = findColumnIndex(headers, insuranceColumnName);
+
+    if (caseIdIndex === -1 || insuranceIndex === -1) {
+      alert(
+        `Column not found!\n\nAvailable columns:\n${headers.join(
+          ", "
+        )}\n\nYou typed:\nCase ID column = ${caseIdColumnName}\nInsurance column = ${insuranceColumnName}`
+      );
+      return [];
+    }
+
+    // Remaining rows = data
+    const dataLines = rawLines.slice(1);
+
+    return dataLines
       .map(line => {
-        const parts = line.split("\t").map(x => x.trim()).filter(Boolean);
+        const parts = line.split("\t").map(x => x.trim());
 
-        const caseId = parts[0] || "";
-        const insurance = parts[parts.length - 1] || "";
+        const caseId = parts[caseIdIndex] || "";
+        const insurance = parts[insuranceIndex] || "";
 
         return { caseId, insurance };
       })
@@ -128,7 +168,8 @@ This is Primary Insurance
 
         const note = {
           caseId: row.caseId,
-          insurance: provider,
+          insurance: provider, // keep same provider name
+          portal: getPortalName(provider),
           content: generateNote(provider),
           status: "IN_PROGRESS"
         };
@@ -142,42 +183,50 @@ This is Primary Insurance
     setExcelText("");
   }
 
-  // ✅ Download all notes (single line each)
- function downloadAllNotes() {
-  let text = "";
+  // ✅ Download all notes
+  function downloadAllNotes() {
+    let text = "";
 
-  const providersOrder = ["UHC", "Humana", "Ambetter", "Medicare", "Other"];
+    const providersOrder = [
+      "UHC",
+      "Humana",
+      "Ambetter",
+      "Cigna",
+      "American Specialty Health",
+      "Medicare",
+      "Other"
+    ];
 
-  providersOrder.forEach(provider => {
-    const notes = providersData[provider] || [];
-    if (notes.length === 0) return;
+    providersOrder.forEach(provider => {
+      const notes = providersData[provider] || [];
+      if (notes.length === 0) return;
 
-    text += `============================================================\n`;
-    text += `PROVIDER: ${provider}\n`;
-    text += `============================================================\n\n`;
+      text += `============================================================\n`;
+      text += `PROVIDER: ${provider}\n`;
+      text += `============================================================\n\n`;
 
-    notes.forEach((note, index) => {
-      text += `NOTE #${index + 1}\n`;
-      text += `Case ID   : ${note.caseId}\n`;
-      text += `Insurance : ${note.insurance || provider}\n`;
-      text += `Status    : ${note.status}\n`;
-      text += `------------------------------------------------------------\n`;
-      text += `${note.content}\n`;
-      text += `------------------------------------------------------------\n\n\n\n\n\n`;
+      notes.forEach((note, index) => {
+        text += `NOTE #${index + 1}\n`;
+        text += `Case ID   : ${note.caseId}\n`;
+        text += `Insurance : ${note.insurance || provider}\n`;
+        text += `Portal    : ${note.portal || getPortalName(provider)}\n`;
+        text += `Status    : ${note.status}\n`;
+        text += `------------------------------------------------------------\n`;
+        text += `${note.content}\n`;
+        text += `------------------------------------------------------------\n\n\n\n\n\n`;
+      });
+
+      text += `\n\n`;
     });
 
-    text += `\n\n`;
-  });
-
-  const blob = new Blob([text], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "insurance-notes.txt";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "insurance-notes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 p-6">
@@ -198,19 +247,36 @@ This is Primary Insurance
       {/* INPUT */}
       <div className="bg-white rounded-xl shadow-md p-6 mb-8">
         <h2 className="text-lg font-semibold mb-2">
-          Paste Data (Case ID + Last Column Insurance)
+          Paste Data (Dynamic Column Names)
         </h2>
 
-        <p className="text-sm text-gray-600 mb-3">
-          Paste your copied table here. It will take:
-          <br />
-          <b>Case ID = 1st column</b> and <b>Insurance = last column</b>
-        </p>
+        {/* Column Inputs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <p className="text-sm font-medium mb-1">Case ID Column Name</p>
+            <input
+              value={caseIdColumnName}
+              onChange={e => setCaseIdColumnName(e.target.value)}
+              className="w-full border p-2 rounded"
+              placeholder="Example: Case ID"
+            />
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-1">Insurance Column Name</p>
+            <input
+              value={insuranceColumnName}
+              onChange={e => setInsuranceColumnName(e.target.value)}
+              className="w-full border p-2 rounded"
+              placeholder="Example: Payor"
+            />
+          </div>
+        </div>
 
         <textarea
           value={excelText}
           onChange={e => setExcelText(e.target.value)}
-          placeholder={`upf2-1831898\t...\tAmbetter\nupf2-1837907\t...\tMedicare\nupf1-1493253\t...\tCigna`}
+          placeholder={`Case ID\t...\tPayor\nupf2-1831898\t...\tAmbetter\nupf2-1837907\t...\tMedicare\nupf1-1493253\t...\tAmerican Specialty Health`}
           className="w-full border p-3 rounded h-52 font-mono text-sm"
         />
 
@@ -236,7 +302,15 @@ This is Primary Insurance
             All Providers
           </button>
 
-          {["UHC", "Humana", "Ambetter", "Medicare", "Other"].map(p => (
+          {[
+            "UHC",
+            "Humana",
+            "Ambetter",
+            "Cigna",
+            "American Specialty Health",
+            "Medicare",
+            "Other"
+          ].map(p => (
             <button
               key={p}
               onClick={() => openView(p)}

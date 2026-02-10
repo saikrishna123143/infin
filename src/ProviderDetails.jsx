@@ -11,9 +11,7 @@ export default function ProviderDetails({
           ? {
               ...note,
               status:
-                note.status === "IN_PROGRESS"
-                  ? "SUBMITTED"
-                  : "IN_PROGRESS"
+                note.status === "IN_PROGRESS" ? "SUBMITTED" : "IN_PROGRESS"
             }
           : note
       );
@@ -48,6 +46,11 @@ export default function ProviderDetails({
               <p>
                 <span className="font-medium">Insurance:</span>{" "}
                 {note.insurance || provider}
+              </p>
+
+              <p>
+                <span className="font-medium">Portal:</span>{" "}
+                <span className="font-semibold">{note.portal || "---"}</span>
               </p>
 
               <p>
@@ -87,7 +90,15 @@ export default function ProviderDetails({
     );
   }
 
-  const providersOrder = ["UHC", "Humana", "Ambetter", "Medicare", "Other"];
+  const providersOrder = [
+    "UHC",
+    "Humana",
+    "Ambetter",
+    "Cigna",
+    "American Specialty Health",
+    "Medicare",
+    "Other"
+  ];
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
